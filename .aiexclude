@@ -1,1 +1,17 @@
 .env
+.env.*
+*.pem
+*.key
+
+uv.lock
+poetry.lock
+requirements.txt
+__pycache__
+*.pyc
+
+*.stl
+temp.stl
+
+node_modules/
+dist/
+build/
