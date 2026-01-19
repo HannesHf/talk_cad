@@ -47,7 +47,7 @@ async def generate_model(request: PromptRequest):
     # 1. AI Anfragen (Wir nutzen deepseek-coder weil günstig & gut)
     try:
         completion = client.chat.completions.create(
-            model="deepseek/deepseek-coder", 
+            model="deepseek/deepseek-v3", 
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": request.prompt}
