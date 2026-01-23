@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TalkCAD - Generative 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #1a1a1a; color: white; }
+        #ui {
+            position: absolute; top: 20px; left: 20px; z-index: 100;
+            background: rgba(0, 0, 0, 0.8); padding: 20px; border-radius: 8px;
+            width: 300px;
+        }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; border: none; border-radius: 4px; }
+        button { 
+            width: 100%; padding: 10px; background: #007bff; color: white; 
+            border: none; border-radius: 4px; cursor: pointer; font-weight: bold;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #555; cursor: wait; }
+        #status { margin-top: 10px; font-size: 0.9em; color: #ccc; }
+        #canvas-container { width: 100vw; height: 100vh; }
+    </style>
+    <!-- Import Three.js als ES Module -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="ui">
+        <h2>TalkCAD</h2>
+        <input type="text" id="promptInput" placeholder="z.B. Ein Würfel 20x20x20" value="Eine Platte 50x50x5 mit einem Loch D=10 in der Mitte">
+        <button id="generateBtn">Generieren</button>
+        <div id="status">Bereit.</div>
+    </div>
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+
+        // 1. Szene Setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x222222);
+        
+        // Licht
+        const ambientLight = new THREE.AmbientLight(0x404040, 2); 
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+        dirLight.position.set(10, 10, 10);
+        scene.add(dirLight);
+
+        // Kamera
+    const camera = new THREE.PerspectiveCamera(50, (window.innerWidth - 320) / window.innerHeight, 0.1, 50000);
+        camera.position.set(50, 50, 50);
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // Grid Helper
+        const gridHelper = new THREE.GridHelper(5000, 50, 0x444444, 0x222222);
+        scene.add(gridHelper);
+        const axesHelper = new THREE.AxesHelper(20);
+        scene.add(axesHelper);
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Resize Handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 2. Logik: Generieren & Laden
+        const btn = document.getElementById('generateBtn');
+        const input = document.getElementById('promptInput');
+        const status = document.getElementById('status');
+        let currentMesh = null;
+
+        btn.addEventListener('click', async () => {
+            const prompt = input.value;
+            if (!prompt) return;
+
+            status.textContent = "Denke nach & generiere...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt })
+                });
+                
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.detail || 'Fehler');
+
+                // STL Parsen
+                const loader = new STLLoader();
+                const geometry = loader.parse(data.stl_data);
+                const material = new THREE.MeshStandardMaterial({ color: 0x00ff88, metalness: 0.5, roughness: 0.5 });
+                
+                if (currentMesh) scene.remove(currentMesh);
+                currentMesh = new THREE.Mesh(geometry, material);
+                scene.add(currentMesh);
+
+                status.textContent = `Fertig! Vol: ${data.analysis.volume}`;
+            } catch (e) {
+                status.textContent = "Fehler: " + e.message;
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

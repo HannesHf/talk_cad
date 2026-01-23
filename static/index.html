@@ -1,56 +1,160 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
-    <title>AI CAD Generator</title>
+    <meta charset="UTF-8">
+    <title>AI CAD MVP</title>
     <style>
-        body { margin: 0; font-family: sans-serif; display: flex; height: 100vh; }
-        #sidebar { width: 300px; padding: 20px; background: #f0f0f0; border-right: 1px solid #ccc; display: flex; flex-direction: column; }
-        #viewer { flex-grow: 1; background: #222; }
-        textarea { width: 100%; height: 100px; margin-bottom: 10px; }
-        button { padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        #status { margin-top: 20px; font-size: 0.9em; color: #555; white-space: pre-wrap; }
-        .warning { color: red; font-weight: bold; margin-top: 10px;}
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar Styling */
+        #sidebar { 
+            width: 320px; 
+            padding: 20px; 
+            background: #f4f4f9; 
+            border-right: 1px solid #ddd; 
+            display: flex; 
+            flex-direction: column; 
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+        
+        h2 { margin-top: 0; color: #333; font-size: 1.2rem; }
+        p { color: #666; font-size: 0.9rem; }
+        
+        textarea { 
+            width: 100%; 
+            height: 120px; 
+            margin-bottom: 15px; 
+            padding: 10px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            resize: vertical;
+            font-family: monospace;
+            box-sizing: border-box; /* Wichtig damit padding nicht width sprengt */
+        }
+        
+        button { 
+            padding: 12px; 
+            background: #2563eb; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        button:hover { background: #1d4ed8; }
+        button:disabled { background: #93c5fd; cursor: not-allowed; }
+
+        #viewer { flex-grow: 1; background: #1e1e1e; position: relative; }
+
+        /* Output Area */
+        #output { margin-top: 20px; flex-grow: 1; overflow-y: auto; }
+        .log { font-size: 0.85rem; padding: 8px; margin-bottom: 5px; border-radius: 4px; }
+        .log.success { background: #dcfce7; color: #166534; border-left: 4px solid #166534; }
+        .log.error { background: #fee2e2; color: #991b1b; border-left: 4px solid #991b1b; }
+        .log.info { color: #555; font-style: italic; }
+
+        /* --- LOADING SPINNER --- */
+        #loader-container {
+            display: none; /* Standardmäßig aus */
+            text-align: center;
+            margin-top: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2563eb;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
-    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.160.0/examples/jsm/loaders/STLLoader.js" type="module"></script>
-    <script src="https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js" type="module"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 <body>
 
 <div id="sidebar">
-    <h2>AI CAD Copilot</h2>
-    <p>Beschreibe dein Bauteil:</p>
-    <textarea id="prompt" placeholder="z.B. Eine Platte 50x50x5 mit einem Loch (Radius 5) in der Mitte"></textarea>
-    <button onclick="generate()">Generieren</button>
-    <div id="status">Bereit.</div>
+    <h2>🛠️ AI CAD MVP</h2>
+    <p>Was möchtest du bauen?</p>
+    <textarea id="prompt" placeholder="Ein Zylinder mit Radius 10 und Höhe 20..."></textarea>
+    
+    <div style="display: flex; gap: 10px;">
+        <button id="gen-btn" onclick="generate()" style="flex: 1;">Modell generieren</button>
+        <button id="reset-btn" style="background: #6c757d; width: 50px; border-radius: 6px; border: none; color: white; cursor: pointer; font-size: 1.2rem;" title="Neu starten">↺</button>
+    </div>
+    
+    <div id="loader-container">
+        <div class="spinner"></div>
+        <span style="font-size: 0.8rem; color: #666;">AI denkt nach & rechnet...</span>
+    </div>
+
+    <div id="output"></div>
 </div>
 
 <div id="viewer"></div>
 
 <script type="module">
-    import { STLLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/STLLoader.js';
-    import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 
-    // 1. Three.js Setup
+    // --- 1. Viewer Setup ---
     const scene = new THREE.Scene();
-    scene.add(new THREE.GridHelper(200, 20)); // Gitter
+    scene.background = new THREE.Color(0x1e1e1e);
     
-    // Lichter
-    const light = new THREE.DirectionalLight(0xffffff, 2);
-    light.position.set(10, 10, 10);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0x404040));
+    // Grid
+    const grid = new THREE.GridHelper(200, 20, 0x444444, 0x222222);
+    scene.add(grid);
+    scene.add(new THREE.AxesHelper(20));
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerWidth - 300), 0.1, 1000);
+    // Lights
+    const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+    dirLight.position.set(10, 20, 20);
+    scene.add(dirLight);
+    const ambientLight = new THREE.AmbientLight(0x404040, 2);
+    scene.add(ambientLight);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(50, (window.innerWidth - 320) / window.innerHeight, 0.1, 1000);
     camera.position.set(50, 50, 50);
 
+    // Renderer
+    const container = document.getElementById('viewer');
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth - 300, window.innerHeight);
-    document.getElementById('viewer').appendChild(renderer.domElement);
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     let currentMesh = null;
+    let currentCode = null; // Speichert den Code für Anpassungen
+
+    // --- Reset Logic ---
+    document.getElementById('reset-btn').addEventListener('click', () => {
+        currentCode = null;
+        document.getElementById('prompt').value = '';
+        document.getElementById('gen-btn').textContent = "Modell generieren";
+        document.getElementById('output').innerHTML = '';
+        if (currentMesh) {
+            scene.remove(currentMesh);
+            currentMesh.geometry.dispose();
+            currentMesh = null;
+            renderer.render(scene, camera);
+        }
+    });
 
     function animate() {
         requestAnimationFrame(animate);
@@ -58,49 +162,115 @@
     }
     animate();
 
-    // 2. Funktion zum Aufrufen des Backends
+    // Responsive Fix
+    window.addEventListener('resize', () => {
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    });
+
+    // --- 2. Logic ---
     window.generate = async function() {
-        const prompt = document.getElementById('prompt').value;
-        const statusDiv = document.getElementById('status');
-        
-        statusDiv.innerHTML = "Denke nach... (AI generiert Code)";
-        
+        const promptInput = document.getElementById('prompt');
+        const btn = document.getElementById('gen-btn');
+        const output = document.getElementById('output');
+        const loader = document.getElementById('loader-container');
+
+        const text = promptInput.value.trim();
+        if (!text) return;
+
+        // UI Reset & Loading State
+        output.innerHTML = ''; 
+        btn.disabled = true;
+        loader.style.display = 'block'; // Spinner an
+
         try {
-            const response = await fetch('/generate', {
+            // Payload vorbereiten (mit History falls vorhanden)
+            const payload = { prompt: text };
+            if (currentCode) {
+                payload.previous_code = currentCode;
+            }
+
+            const res = await fetch('/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: prompt })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await res.json();
+
+            if (!res.ok) throw new Error(data.detail || "Server Error");
+
+            // 3. Render Result
+            // Code speichern für nächste Runde
+            currentCode = data.code;
+            btn.textContent = "Änderung anwenden";
+
+            // Base64 zu ArrayBuffer konvertieren
+            const binaryString = window.atob(data.stl_data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const loaderSTL = new STLLoader();
+            const geometry = loaderSTL.parse(bytes.buffer);
+            
+            // Material Update (Hübscheres Blau)
+            const material = new THREE.MeshStandardMaterial({ 
+                color: 0x3b82f6, 
+                roughness: 0.4,
+                metalness: 0.3
             });
 
-            const data = await response.json();
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh.geometry.dispose();
+            }
 
-            if (!response.ok) throw new Error(data.detail || "Fehler");
-
-            statusDiv.innerHTML = "Rendere Modell...";
-
-            // STL Parsen und Anzeigen
-            const loader = new STLLoader();
-            const geometry = loader.parse(data.stl_data);
-            const material = new THREE.MeshPhongMaterial({ color: 0x00ff00, specular: 0x111111, shininess: 200 });
-            
-            if (currentMesh) scene.remove(currentMesh);
             currentMesh = new THREE.Mesh(geometry, material);
             
-            // Zentrieren
+            // Auto-Center
             geometry.computeBoundingBox();
             geometry.center();
             
-            scene.add(currentMesh);
+            // STL Fix Rotation (-90deg X ist Standard bei STL)
+            currentMesh.rotation.x = -Math.PI / 2;
             
-            // Output anzeigen
-            let msg = `✅ Fertig!\nVolumen: ${data.analysis.volume}mm³`;
-            if (data.analysis.warning) {
-                msg += `\n⚠️ ${data.analysis.warning}`;
-            }
-            statusDiv.innerHTML = msg;
+            scene.add(currentMesh);
 
-        } catch (e) {
-            statusDiv.innerHTML = "❌ Fehler: " + e.message;
+            // --- Auto-Zoom auf das Objekt ---
+            const box = geometry.boundingBox;
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            
+            // Kamera Distanz berechnen, damit das Objekt reinpasst
+            const fitHeightDistance = maxDim / (2 * Math.atan((Math.PI * camera.fov) / 360));
+            const fitDistance = fitHeightDistance * 2.0; // Faktor 2.0 für etwas Abstand
+            
+            camera.position.set(fitDistance, fitDistance, fitDistance);
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            // Log Success
+            output.innerHTML = `
+                <div class="log success">
+                    <strong>Erfolg!</strong><br>
+                    Volumen: ${data.analysis.volume} mm³
+                    ${data.analysis.warning ? `<br><small>${data.analysis.warning}</small>` : ''}
+                </div>
+            `;
+
+        } catch (err) {
+            console.error(err);
+            output.innerHTML = `<div class="log error"><strong>Fehler:</strong><br>${err.message}</div>`;
+        } finally {
+            // Cleanup State (Passiert immer)
+            btn.disabled = false;
+            loader.style.display = 'none'; // Spinner aus
         }
     };
 </script>
