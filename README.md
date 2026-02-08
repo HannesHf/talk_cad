@@ -2,7 +2,7 @@
 
 TalkCAD ist ein generativer CAD-Copilot, der es ermöglicht, 3D-Modelle für CAD-Anwendungen in Echtzeit durch natürliche Sprache zu erstellen.
 
-https://github.com/user-attachments/assets/8e8b1356-779f-4f89-98f3-fe167bc4c948
+<img width="2336" height="1198" alt="Image" src="https://github.com/user-attachments/assets/8e8b1356-779f-4f89-98f3-fe167bc4c948" />
 
 Das Projekt nutzt **DeepSeek R1** (via OpenRouter, andere Modelle möglich) zur Generierung von Python-Code für die **build123d** CAD-Bibliothek. Das Ergebnis wird sofort als 3D-Modell im Browser visualisiert.
 
