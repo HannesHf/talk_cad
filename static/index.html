@@ -91,6 +91,9 @@
     <h2>🛠️ AI CAD MVP</h2>
     <p>Was möchtest du bauen?</p>
     <textarea id="prompt" placeholder="Ein Zylinder mit Radius 10 und Höhe 20..."></textarea>
+    <div id="mode-status" style="display:none; margin-bottom: 10px; font-size: 0.85rem; color: #2563eb; background: #e0f2fe; padding: 8px; border-radius: 4px;">
+        ✨ <b>Änderungs-Modus:</b> Dein nächster Befehl passt das aktuelle Modell an.
+    </div>
     
     <div style="display: flex; gap: 10px;">
         <button id="gen-btn" onclick="generate()" style="flex: 1;">Modell generieren</button>
@@ -117,19 +120,19 @@
     scene.background = new THREE.Color(0x1e1e1e);
     
     // Grid
-    const grid = new THREE.GridHelper(200, 20, 0x444444, 0x222222);
+    const grid = new THREE.GridHelper(10000, 100, 0x444444, 0x222222);
     scene.add(grid);
-    scene.add(new THREE.AxesHelper(20));
+    scene.add(new THREE.AxesHelper(500));
 
     // Lights
     const dirLight = new THREE.DirectionalLight(0xffffff, 3);
-    dirLight.position.set(10, 20, 20);
+    dirLight.position.set(1000, 2000, 2000);
     scene.add(dirLight);
     const ambientLight = new THREE.AmbientLight(0x404040, 2);
     scene.add(ambientLight);
 
     // Camera
-    const camera = new THREE.PerspectiveCamera(50, (window.innerWidth - 320) / window.innerHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(50, (window.innerWidth - 320) / window.innerHeight, 0.1, 100000);
     camera.position.set(50, 50, 50);
 
     // Renderer
@@ -145,9 +148,12 @@
     // --- Reset Logic ---
     document.getElementById('reset-btn').addEventListener('click', () => {
         currentCode = null;
-        document.getElementById('prompt').value = '';
+        const promptInput = document.getElementById('prompt');
+        promptInput.value = '';
+        promptInput.placeholder = "Ein Zylinder mit Radius 10 und Höhe 20...";
         document.getElementById('gen-btn').textContent = "Modell generieren";
         document.getElementById('output').innerHTML = '';
+        document.getElementById('mode-status').style.display = 'none';
         if (currentMesh) {
             scene.remove(currentMesh);
             currentMesh.geometry.dispose();
@@ -177,6 +183,7 @@
         const btn = document.getElementById('gen-btn');
         const output = document.getElementById('output');
         const loader = document.getElementById('loader-container');
+        const modeStatus = document.getElementById('mode-status');
 
         const text = promptInput.value.trim();
         if (!text) return;
@@ -190,7 +197,7 @@
             // Payload vorbereiten (mit History falls vorhanden)
             const payload = { prompt: text };
             if (currentCode) {
-                payload.previous_code = currentCode;
+                payload.base_code = currentCode;
             }
 
             const res = await fetch('/generate', {
@@ -206,7 +213,12 @@
             // 3. Render Result
             // Code speichern für nächste Runde
             currentCode = data.code;
+            
+            // UI Update für "Chat-Modus"
             btn.textContent = "Änderung anwenden";
+            modeStatus.style.display = 'block';
+            promptInput.value = ''; // Eingabe leeren für den nächsten Befehl
+            promptInput.placeholder = 'z.B. "Mach es höher" oder "Füge eine Bohrung hinzu"...';
 
             // Base64 zu ArrayBuffer konvertieren
             const binaryString = window.atob(data.stl_data);
