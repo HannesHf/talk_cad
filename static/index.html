@@ -200,7 +200,8 @@
                 payload.base_code = currentCode;
             }
 
-            const res = await fetch('/generate', {
+            const apiUrl = window.location.port === "8000" ? '/generate' : 'http://localhost:8000/generate';
+            const res = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
